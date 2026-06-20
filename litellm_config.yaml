@@ -1,0 +1,9 @@
+model_list:
+  - model_name: qwen-coder-14b
+    litellm_params:
+      model: ollama/qwen2.5-coder:14b
+      api_base: http://192.168.1.94:11434
+      num_ctx: 16384  
+      
+litellm_settings:
+  drop_params: true

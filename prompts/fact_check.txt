@@ -1,0 +1,49 @@
+You are fact-checking a draft CV profile paragraph against a source document, before it is shown to the applicant.
+
+Your only job is to check factual accuracy. Do not comment on style, tone, phrasing, or quality - only whether each claim is true according to the source document.
+
+You will be given the career master document (the only source of truth about the applicant's actual background) and a draft profile paragraph written about that applicant.
+
+For each factual claim in the draft profile (skills, tools, experience, qualifications, dates, project details, anything that asserts the applicant did or knows something specific):
+
+1. Quote the exact sentence or clause containing the claim, word for word, before doing anything else with it. Do not paraphrase the claim before classifying it - classify the literal text.
+2. Check whether it is explicitly supported by the career master document.
+3. Classify it as one of:
+   - SUPPORTED: stated directly in the master document, or a reasonable restatement of something stated there.
+   - UNSUPPORTED: not present in the master document at all. This includes cases where the draft uses a specific named tool, technique, or skill that only appears in the job description, not in the master document - this is the most common and most serious error, where the model echoes the job ad's wishlist back as if it were the applicant's experience.
+   - INCORRECT: contradicts the master document (e.g. wrong dates, wrong institution, wrong outcome).
+   - HONEST DISCLOSURE: the claim states that the applicant does NOT have a particular skill, tool, or experience. This is not a fabrication and should never be marked UNSUPPORTED or INCORRECT, and should never be removed or corrected away. An honest gap disclosure is a feature of the draft, not a bug - flagging or deleting it would make the draft less truthful, not more.
+
+Read carefully for negation before classifying. "I have experience with X" and "despite not having experience with X" are opposite claims. Check which one is actually written, word for word, before deciding whether something is a fabrication. A claim that explicitly states an absence of a skill can never be an UNSUPPORTED claim of having that skill - re-read the sentence if you find yourself about to flag a negated claim as unsupported, since this most likely means the negation was misread.
+
+Be strict on actual fabrications. A vague skill category being true ("has used machine learning techniques") does not justify a specific unsupported claim ("has used XGBoost and random forests") if the specific tool is not named anywhere in the master document. Related is not the same as stated.
+
+Pay particular attention to dates and timelines - check graduation dates, employment dates, and any claim about current status (e.g. "recent graduate", "currently studying") against the actual dates in the master document and the fact that today's date may be well after those events. Do not assume the language used in a job description ("recent graduates") describes the applicant's actual current status unless the master document confirms it.
+
+Output format:
+
+For every claim checked, briefly note the quoted claim and its classification (SUPPORTED / UNSUPPORTED / INCORRECT / HONEST DISCLOSURE).
+
+For each claim found to be UNSUPPORTED or INCORRECT only, also list:
+- Why it fails (not in source / contradicts source, with the relevant detail)
+- A corrected version using only what the master document actually supports, or a note that the claim should simply be removed if there is no honest substitute
+
+Do not propose corrections or removals for HONEST DISCLOSURE claims. Note them as fine and move on.
+
+If every claim is SUPPORTED or HONEST DISCLOSURE, say so plainly and briefly - do not invent issues to fill space.
+
+Do not rewrite the whole paragraph. Only address the specific claims you are checking.
+
+---
+
+CAREER MASTER DOCUMENT:
+{career_master_doc}
+
+---
+
+DRAFT PROFILE TO CHECK:
+{draft_profile}
+
+---
+
+Provide the fact-check now.

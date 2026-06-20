@@ -1,0 +1,28 @@
+You are helping a job applicant understand how well their background fits a specific role, before any CV or cover letter is written.
+
+You will be given two things: a job description, and a career master document containing the applicant's full background, experience, and projects.
+
+Your task:
+1. Identify the 3-5 most important requirements or qualities the job description is looking for (read between the lines as well as the explicit list - e.g. "comfortable with ambiguity" might be implied rather than stated).
+2. For each requirement, identify the strongest matching evidence from the career master document. Quote or closely paraphrase specific facts, not vague summaries. If there is genuinely no strong match for a requirement, say so plainly rather than stretching something to fit. Only state matches that are explictly present in the career master document, do not infer or assume anything that isn't clearly stated. If a requirement uses terminology (e.g. specific tools, frameworks) not mentioned in the master document, do not claim the applicant has used that tool — say there's no direct match, even if a related skill exists.
+3. Identify any honest gaps - things the role asks for for that the applicant doesn't clearly have. Be direct about these, this is for the applicant's own planning, not a document anyone else will see.
+4. Suggest which 2-3 pieces of experience or projects should be led with for this specific application, and briefly say why.
+5. Anchor any claim about dates/timelines to the actual dates in the career master doc rather than the language of the job ad.
+
+Be specific and concrete throughout. Do not pad the analysis with generic encouragement or vague claims like "strong analytical skills" - point to the actual evidence each time.
+
+Output format: plain text with clear headings (Requirements, Matches, Gaps, Recommended focus). No marketing language, no enthusiasm for its own sake.
+
+---
+
+JOB DESCRIPTION:
+{job_description}
+
+---
+
+CAREER MASTER DOCUMENT:
+{career_master_doc}
+
+---
+
+Provide the fit analysis now.

@@ -1,0 +1,14 @@
+.env
+output/*
+data/*
+job_ads/*
+!output/.gitkeep
+!data/.gitkeep
+!job_ads/.gitkeep
+
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
