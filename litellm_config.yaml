@@ -3,7 +3,7 @@ model_list:
     litellm_params:
       model: ollama/qwen2.5-coder:14b
       api_base: http://192.168.1.94:11434
-      num_ctx: 16384  
-      
+      num_ctx: 16384  # default (often 2048-4096) is too small for the master doc + job ad + instructions
+
 litellm_settings:
   drop_params: true

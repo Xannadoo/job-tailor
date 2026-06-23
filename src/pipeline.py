@@ -7,10 +7,31 @@ multi-step agent loop with branching or retries - each stage runs
 once and passes its output to the next.
 """
 
+import datetime
 import os
 
 import config
-from src import llm_client
+from src import date_facts, llm_client
+
+
+def get_today() -> datetime.date:
+    """Return today's date as a date object."""
+    return datetime.date.today()
+
+
+def build_date_facts_for_prompt(career_master_doc: str) -> str:
+    """
+    Pre-compute date status and durations for every parseable date
+    range in the master document, so prompts can be given the answers
+    directly rather than asking the model to do date arithmetic.
+
+    This replaced an earlier approach of just passing today's date
+    into the prompt and instructing the model to do the subtraction
+    itself - that worked for simple tense judgements (finished vs
+    ongoing) but the model remained unreliable at actual duration
+    arithmetic (e.g. miscalculating Jan 2023-Jun 2025 as four years).
+    """
+    return date_facts.build_date_facts_block(career_master_doc, get_today())
 
 
 def load_prompt(filename: str) -> str:
@@ -36,6 +57,8 @@ def run_fit_analysis(job_description: str, career_master_doc: str) -> str:
     prompt = template.format(
         job_description=job_description,
         career_master_doc=career_master_doc,
+        today_date=get_today().isoformat(),
+        date_facts=build_date_facts_for_prompt(career_master_doc),
     )
     return llm_client.complete(prompt)
 
@@ -75,6 +98,8 @@ def run_fact_check(career_master_doc: str, draft_profile: str) -> str:
     prompt = template.format(
         career_master_doc=career_master_doc,
         draft_profile=draft_profile,
+        today_date=get_today().isoformat(),
+        date_facts=build_date_facts_for_prompt(career_master_doc),
     )
     return llm_client.complete(prompt)
 
