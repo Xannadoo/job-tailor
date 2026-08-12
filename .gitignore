@@ -2,6 +2,8 @@
 output/*
 data/*
 job_ads/*
+logs/*
+
 !output/.gitkeep
 !data/.gitkeep
 !job_ads/.gitkeep
@@ -12,3 +14,7 @@ __pycache__/
 .venv/
 venv/
 
+*idiot*
+
+#bash scripts
+*.sh

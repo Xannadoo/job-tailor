@@ -1,9 +1,15 @@
 model_list:
   - model_name: qwen-coder-14b
     litellm_params:
-      model: ollama/qwen2.5-coder:14b
+      model: ollama_chat/qwen2.5-coder:14b
       api_base: http://192.168.1.94:11434
-      num_ctx: 16384  # default (often 2048-4096) is too small for the master doc + job ad + instructions
+      num_ctx: 16384
+
+  - model_name: gemma-cloud
+    litellm_params:
+      model: ollama_chat/gemma4:31b-cloud
+      api_base: http://localhost:11434
+      num_ctx: 16384
 
 litellm_settings:
   drop_params: true

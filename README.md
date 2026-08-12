@@ -223,6 +223,221 @@ where they echo patterns from LLM evaluation research more generally.
      beyond the single case it was written against, not just fixing
      that one instance.
 
+8. **Correct number, wrong conclusion.** With the date facts module in
+   place and working, a new and narrower bug appeared: the
+   fact-checker had the right duration for the TA role (2.4 years,
+   correctly pulled from the pre-computed date facts) and still
+   flagged a true draft claim - "Teaching Assistant for over two
+   years" - as INCORRECT, reasoning that the duration was "off by more
+   than a year." 2.4 years is genuinely more than two years; there is
+   no conflict between the draft's claim and the checker's own cited
+   number. The checker had correct information and still drew an
+   unsupported conclusion from it - not a recurrence of the original
+   arithmetic bug (the number was right), but a comparison/reasoning
+   failure sitting on top of an otherwise-correct fact.
+   - Status: identified, not yet fixed. Same family as entry 5's
+     "recently completed" overcorrection - a model that, having been
+     told to scrutinise duration claims, applies that scrutiny even
+     when the actual numbers do not disagree. Likely candidate fix:
+     make explicit that an approximate verbal duration ("over two
+     years," "a couple of years") is consistent with a precise figure
+     as long as the precise figure is on the correct side of the
+     verbal claim (e.g. "over two years" is satisfied by anything
+     above 2.0, not just numbers close to 2.0) - the checker currently
+     seems to be testing for closeness to a round number rather than
+     logical consistency with the stated comparison.
+
+9. **Career-length error, worse version of entry 8.** Testing against
+   shorter, more conversational job ads (JOE & THE JUICE, KIME,
+   Halfspace) rather than the original long, dense Management
+   Solutions ad surfaced a more severe instance of entry 8's pattern.
+   The fact-checker correctly enumerated every role and its actual
+   date range from the master document, then concluded: "this aligns
+   with the claim of a seven-year career." The applicant's career
+   history runs back to 2009 - roughly seventeen years before today,
+   not seven. The checker had every correct number in front of it,
+   stated them accurately, and still endorsed a claim off by a
+   decade. Same family as entry 8 (correct number, wrong conclusion),
+   but shows the failure isn't bounded to "off by a year or so" - it
+   can be arbitrarily large once the claim involves summing or
+   reasoning across multiple date ranges rather than checking one.
+   - Status: identified, not yet fixed. Reinforces that comparison and
+     summation across multiple pre-computed date facts is still being
+     left to the model's own reasoning, which has now failed at both
+     small and large scale. Possibly needs `date_facts.py` to also
+     compute and supply an aggregate (e.g. "total professional
+     experience from earliest start date to today") rather than only
+     per-role facts, so a career-length claim has a pre-computed
+     number to check against directly, the same way single-role
+     duration claims now do.
+
+10. **Fabrication still slips through occasionally.** On the same JOE
+    & THE JUICE test, the draft profile claimed the MSc "delved into
+    labour analytics" - this does not appear anywhere in the master
+    document and was not flagged by the fact-checker at all, unlike
+    the XGBoost/Hadoop fabrications in entry 2, which were caught
+    after the fix. This is a repeat of the original fabrication-echo
+    failure mode (job-ad terminology - "labour analytics" is from the
+    JOE & THE JUICE ad - being echoed back as the applicant's own
+    experience), just with new vocabulary, and a reminder that the
+    anti-fabrication instruction is not airtight even where it has
+    been working on other ads.
+    - Status: identified, not yet fixed. Worth tracking whether this
+      recurs across more varied ads before deciding whether it's
+      occasional model unreliability (acceptable at some rate, to be
+      caught by a later stage like the critic loop) or a pattern with
+      an identifiable trigger worth a targeted prompt fix.
+
+11. **Forward-looking interest in the role misclassified as an
+    unsupported factual claim.** On the KIME ad, the fact-checker
+    flagged "I'm excited about the opportunity to bring my skills to
+    KIME's core engineering team" as UNSUPPORTED, reasoning that
+    "KIME's core engineering team" doesn't appear in the master
+    document. But this is not a claim about past experience - it's a
+    forward-looking statement of interest in the specific role being
+    applied for, which by definition cannot and should not need to
+    appear in a document describing the applicant's history. The
+    checker treated normal cover-letter-style aspiration about the
+    target role as if it were a falsifiable claim requiring source
+    evidence, which no honest application could ever satisfy.
+    - This is a different category from entries 2/10 (fabricated past
+      experience) and from entries 6/7 (evidentiary standard for
+      hard vs soft claims) - it's a tense/intent misclassification:
+      the checker isn't distinguishing "I did X" from "I want to do X
+      here," and is applying the wrong test to the latter.
+    - Status: identified, not yet fixed. Likely fix: add an explicit
+      instruction to recognise forward-looking statements of interest
+      in the role/company being applied to as a distinct category
+      that should not be fact-checked against the master document at
+      all (similar to how `HONEST DISCLOSURE` is exempted) - the
+      question for these is whether they are honest expressions of
+      interest, not whether they are independently verifiable.
+
+12. **Date-related scrutiny firing without a real inconsistency.** Also
+    on the KIME ad: "Living in Copenhagen since 2020, I am fully
+    committed to being an onsite contributor" was flagged INCORRECT,
+    with reasoning that conflated living somewhere since 2020 with
+    starting an unrelated job in 2025 - two facts that are not in
+    tension at all. The "corrected version" produced didn't even
+    address its own stated objection. This looks like the checker
+    pattern-matching "sentence contains a date, my instructions say
+    scrutinise dates" and firing regardless of whether an actual
+    inconsistency exists - a new variant of the entries 5/8/9 family
+    (scrutiny applied without a real trigger), this time on a
+    residency claim rather than an employment duration or career
+    length claim.
+    - Status: identified, not yet fixed. Worth holding until enough
+      examples of this "scrutiny fires without a real conflict"
+      pattern accumulate across entries 5, 8, 9, and 12 to address
+      with one more general fix, rather than patching each surface
+      form separately.
+
+13. **GENUINE_GAP/MISSING_EVIDENCE boundary unstable across identical
+    reruns.** Testing the critic prompt in isolation (5 repeated runs,
+    same job ad, same draft, gemma3:27b-cloud via Ollama) found that
+    while JSON validity was reliable (5/5 valid, parseable output every
+    time), one specific issue - lack of demonstrated scikit-learn/
+    XGBoost/pandas skills - was classified MISSING_EVIDENCE in 3 runs
+    and GENUINE_GAP in 2 runs, with essentially the same underlying
+    reasoning each time. This matters more than ordinary
+    classification noise because the loop control treats the two
+    categories completely differently: MISSING_EVIDENCE is something
+    the generator can revise its way out of; GENUINE_GAP forces an
+    honest acknowledgement and can never receive a
+    `suggested_direction`. Whether the loop tries to help or gives up
+    on a real issue was, in this test, effectively a coin flip rather
+    than something grounded in the actual evidence. A softer version
+    of the same instability also showed up in `quoted_text` selection
+    for one GENUINE_GAP flag, which pointed at the applicant's
+    strongest self-description rather than the actual absent evidence
+    - the nearest sentence to the gap, not the gap itself.
+    One thing that did hold up perfectly across all 25 flags in the
+    5-run test: not a single `GENUINE_GAP` flag was ever given a
+    populated `suggested_direction`, despite that hard constraint only
+    being enforced by the prompt instruction, not yet by code at this
+    stage. Worth noting as a real positive result alongside the
+    instability finding, not just a caveat to it.
+    - Status: mitigation built, not yet integration-tested.
+      `src/gap_verifier.py` re-checks any GENUINE_GAP flag against the
+      master document using the same direct-or-adjacent evidentiary
+      standard the fact-checker already uses for hard-skill claims,
+      via a narrow prompt (`prompts/verify_gap.txt`) scoped to one flag
+      at a time. If real evidence turns up that the critic missed, the
+      verdict is `ACTUALLY_SUPPORTED` and the flag should be
+      downgraded back to MISSING_EVIDENCE/WEAK_FRAMING rather than
+      accepted as unaddressable. Built with two call paths: a
+      deterministic one (the loop driver calls
+      `verify_genuine_gap()` directly on every GENUINE_GAP flag,
+      unconditionally) and an experimental agentic one (the critic
+      itself could call this as a real OpenAI-style tool via
+      `complete_with_tools()`, added to `llm_client.py` for this
+      purpose) - only the deterministic path is expected to be
+      reliable given everything else this project has found about
+      model judgement calls; the agentic path is a genuine test of
+      whether this backend supports real tool-calling through
+      LiteLLM at all, ~~which is not yet confirmed either way~~ Confirmed.
+      (`test_tool_calling.py` checks this in isolation, separate from
+      whether the verification logic itself is correct).
+
+14. **Gap verifier: compound requirement partial-match bug.** First
+    end-to-end test of the completed agentic round trip (real tool
+    call, real execution against the master doc, result fed back,
+    final answer produced) worked mechanically without any failures -
+    the model correctly chose to call the tool both times, arguments
+    were extracted correctly, and the round trip completed cleanly.
+    But one of the two test verdicts was wrong. Given a job
+    requirement bundling several distinct things together
+    ("statistical programming languages (SAS, R, Python, Matlab), big
+    data tools... and cloud platforms (AWS, Azure, GCP)" - copied
+    verbatim from a real job ad's phrasing) and a quoted draft claim
+    that specifically discloses lacking SAS and cloud platforms, the
+    verifier found real, true evidence elsewhere in the bundle (Python
+    and R are genuinely in the master doc) and concluded the whole
+    requirement was `ACTUALLY_SUPPORTED` - overturning an honest,
+    correct disclosure. The specific narrow thing being disclosed as
+    absent (SAS, cloud platforms) still has no basis anywhere, but the
+    verifier's check ran against the requirement as a whole rather
+    than against the specific sub-claim the quoted text was actually
+    about.
+    - Same family as entries 8/9/12 (correct evidence retrieved, wrong
+      conclusion drawn from it), now showing up in the new gap
+      verifier rather than the fact-checker. Also relevant: real job
+      ads bundle multiple tools into single bullet points routinely
+      (this project's own Management Solutions test ad does this), so
+      this will recur on real data, not just constructed test cases.
+    - A second test case in the same run (random forests/clustering
+      not named directly, but covered via Advanced Machine Learning
+      coursework) worked correctly - the verifier found genuine
+      adjacent evidence and correctly overturned a flag that looked
+      unsupported on the surface. Confirms the verifier's core logic
+      works when the requirement is a single, specific thing; the bug
+      is specifically about compound/bundled requirements.
+    - Status: identified, not yet fixed. Likely fix: `verify_gap.txt`
+      needs to check whether the *specific* tool/skill mentioned in
+      the quoted disclosure has a basis, not whether the
+      `job_ad_requirement` string as a whole has any basis anywhere -
+      the same "check each part, not just the easiest one to verify"
+      principle already applied to fact-checking narrow-fact-licenses-
+      broader-claim cases (entry 6) needs to apply here too, just
+      applied to the requirement side of the comparison instead of
+      the claim side.
+
+
+      
+**Entry 13 is a new category: instability in the critic's own
+structured categorisation, not the free-text reasoning failures
+entries 1-12 were about.** The earlier entries were mostly about a
+single model call getting one thing wrong in one direction. This is
+about the same call producing genuinely different classifications on
+identical input - which the loop's deterministic control logic
+(entries in the critic loop roadmap section) assumed would be stable
+enough to build hard rules on top of. The gap-verifier is the first
+piece of this project built explicitly as a check on the critic
+rather than a check on the generator's output, and the first piece
+built with two deliberately different invocation paths (agentic vs
+deterministic) as part of testing what "agentic" actually buys over
+just calling the same logic directly in code.
+
 **Pattern across entries 2-5:** every one of these is a case of the
 model producing fluent, confident, wrong output rather than visibly
 failing - the harder failure mode to catch, and the more interesting
@@ -247,29 +462,24 @@ the prompt/schema, then accepting that the soft-skill category will
 always need a fuzzier standard than the hard-skill one, by design
 rather than as a remaining bug to eliminate.
 
-8. **Correct number, wrong comparison.** With `date_facts.py` already
-   supplying the right duration (~2.4 years for the TA role), the
-   fact-checker still flagged the draft's "for over two years" as
-   INCORRECT, citing its own correct figure as the reason - despite
-   2.4 years genuinely being over two years. The pre-computed fact was
-   used correctly as a number, but the comparison logic applied to it
-   (does claimed duration X conflict with actual duration Y) was
-   wrong. This is distinct from entry 5: the arithmetic problem there
-   is solved by `date_facts.py`, but supplying a correct number doesn't
-   automatically make every comparison drawn from that number correct.
-   Removing arithmetic from the model's job removed one failure point,
-   not the only one - comparing two correct numbers is itself a small
-   reasoning step that can still go wrong.
-   - Status: identified, not yet fixed. Likely a small, contained
-     addition to `fact_check.txt`: an explicit rule that a vaguer
-     duration claim ("over X years", "more than X years") is supported
-     by any actual duration greater than X, and should only be flagged
-     if the actual duration is at or below the stated threshold.
-     Lower priority than entries 6-7 since it's narrow and the
-     direction of the error (flagging a true claim as wrong) is safer
-     than the reverse.
+**Entries 8, 9, and 12 are one family: scrutiny without a real
+trigger.** Once the fact-checker was instructed to scrutinise dates
+and durations carefully (to catch entries 3 and 5), it became prone to
+firing that scrutiny reflexively - on a duration that was actually
+correct (8), on a multi-role sum it then got wrong despite having the
+right inputs (9), and on a residency claim with no real conflict at
+all (12). The common shape: the checker can usually retrieve or
+compute the right underlying numbers, but doesn't reliably check
+whether those numbers actually contradict the draft before objecting.
 
-
+**Entries 10 and 11 are a reminder that the fixes made so far are not
+universal.** Entry 10 shows the original fabrication-echo bug (2) can
+still occur on new vocabulary from a different ad. Entry 11 shows a
+new failure shape entirely - confusing a future-tense statement of
+interest with a falsifiable factual claim. Testing against a more
+varied set of job ads, rather than repeatedly running the same one,
+surfaced both - worth keeping a rotating set of test ads going forward
+rather than over-indexing on any single one.
 
 ## Roadmap
 
