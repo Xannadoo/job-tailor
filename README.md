@@ -382,45 +382,36 @@ where they echo patterns from LLM evaluation research more generally.
 14. **Gap verifier: compound requirement partial-match bug.** First
     end-to-end test of the completed agentic round trip (real tool
     call, real execution against the master doc, result fed back,
-    final answer produced) worked mechanically without any failures -
-    the model correctly chose to call the tool both times, arguments
-    were extracted correctly, and the round trip completed cleanly.
-    But one of the two test verdicts was wrong. Given a job
-    requirement bundling several distinct things together
-    ("statistical programming languages (SAS, R, Python, Matlab), big
-    data tools... and cloud platforms (AWS, Azure, GCP)" - copied
-    verbatim from a real job ad's phrasing) and a quoted draft claim
+    final answer produced) worked mechanically without any failures,
+    but one of two test verdicts was wrong. Given a job requirement
+    bundling several distinct things together ("statistical
+    programming languages (SAS, R, Python, Matlab), big data tools...
+    and cloud platforms (AWS, Azure, GCP)") and a quoted draft claim
     that specifically discloses lacking SAS and cloud platforms, the
     verifier found real, true evidence elsewhere in the bundle (Python
     and R are genuinely in the master doc) and concluded the whole
     requirement was `ACTUALLY_SUPPORTED` - overturning an honest,
-    correct disclosure. The specific narrow thing being disclosed as
-    absent (SAS, cloud platforms) still has no basis anywhere, but the
-    verifier's check ran against the requirement as a whole rather
-    than against the specific sub-claim the quoted text was actually
-    about.
-    - Same family as entries 8/9/12 (correct evidence retrieved, wrong
-      conclusion drawn from it), now showing up in the new gap
-      verifier rather than the fact-checker. Also relevant: real job
-      ads bundle multiple tools into single bullet points routinely
-      (this project's own Management Solutions test ad does this), so
-      this will recur on real data, not just constructed test cases.
-    - A second test case in the same run (random forests/clustering
-      not named directly, but covered via Advanced Machine Learning
-      coursework) worked correctly - the verifier found genuine
-      adjacent evidence and correctly overturned a flag that looked
-      unsupported on the surface. Confirms the verifier's core logic
-      works when the requirement is a single, specific thing; the bug
-      is specifically about compound/bundled requirements.
-    - Status: identified, not yet fixed. Likely fix: `verify_gap.txt`
-      needs to check whether the *specific* tool/skill mentioned in
-      the quoted disclosure has a basis, not whether the
-      `job_ad_requirement` string as a whole has any basis anywhere -
-      the same "check each part, not just the easiest one to verify"
-      principle already applied to fact-checking narrow-fact-licenses-
-      broader-claim cases (entry 6) needs to apply here too, just
-      applied to the requirement side of the comparison instead of
-      the claim side.
+    correct disclosure. Same family as entries 8/9/12 (correct
+    evidence retrieved, wrong conclusion drawn from it), now in the
+    gap verifier rather than the fact-checker.
+    - Status: **fixed and confirmed working.** `verify_gap.txt` now
+      requires an explicit scoping step before checking anything -
+      identify the specific item(s) the quoted text is actually about,
+      not the requirement bundle as a whole - and surfaces that
+      decision as a `scoped_items` field in the response, so the
+      scoping is visible rather than assumed. Re-tested end to end
+      using the exact bundled-requirement shape that caused the
+      original bug: the verifier now correctly returns `CONFIRMED_GAP`
+      with `scoped_items` naming "SAS, cloud platforms" specifically,
+      correctly ignoring the R/Python evidence present elsewhere in
+      the same bundle. A second case (random forests not named
+      directly, but covered via Advanced Machine Learning coursework)
+      was re-run alongside it and still correctly returns
+      `ACTUALLY_SUPPORTED` - confirming the scoping fix didn't
+      overcorrect into rejecting genuine adjacent evidence once
+      checking became narrower. Regression-tested via
+      `test_agentic_verification.py`, which should be re-run any time
+      `verify_gap.txt` changes.
 
 
       

@@ -1,15 +1,15 @@
 """
 Verifies GENUINE_GAP flags raised by the critic.
 
-Why this exists: testing the critic in isolation (see README failure
-log) found the GENUINE_GAP/MISSING_EVIDENCE boundary is unstable
-across identical reruns of the same input - the same underlying issue
-got classified as GENUINE_GAP in some runs and MISSING_EVIDENCE in
-others. This matters because the loop control treats the two
-completely differently: MISSING_EVIDENCE can be revised, GENUINE_GAP
-forces an honest acknowledgement and can never get a
-suggested_direction. A coin-flip on the category decides whether the
-loop tries to help or gives up, independent of the actual evidence.
+Why this exists: testing the critic in isolation found the
+GENUINE_GAP/MISSING_EVIDENCE boundary is unstable across identical
+reruns of the same input - the same underlying issue got classified
+as GENUINE_GAP in some runs and MISSING_EVIDENCE in others. This
+matters because the loop control treats the two completely
+differently: MISSING_EVIDENCE can be revised, GENUINE_GAP forces an
+honest acknowledgement and can never get a suggested_direction. A
+coin-flip on the category decides whether the loop tries to help or
+gives up, independent of the actual evidence.
 
 This module re-checks any GENUINE_GAP flag against the master doc
 before the loop treats it as settled, using the same direct-or-
@@ -17,13 +17,30 @@ adjacent evidentiary standard as the fact-checker's hard-skill claims.
 If real evidence turns up that the critic missed, the flag is
 downgraded rather than accepted as unaddressable.
 
+Fix history: the first end-to-end test of this module found a second
+bug, distinct from the instability above - when a job_ad_requirement
+bundles several distinct tools/skills together (e.g. "SAS, R, Python,
+Matlab"), and the quoted draft text is an honest disclosure about only
+some of them (e.g. "I have not used SAS or cloud platforms"), the
+verifier was checking whether ANY part of the bundle had support
+rather than the specific part being disclosed as absent - finding
+real evidence for Python/R and wrongly concluding the whole bundle,
+including SAS specifically, was supported. verify_gap.txt now
+requires an explicit scoping step first (surfaced as scoped_items in
+the response) so the check runs against the specific item(s) the
+quoted text is actually about, not the bundle as a whole. Not yet
+re-tested end to end after this fix - the fix should be re-verified
+once the full critic loop is built and running against real,
+naturally-bundled job ad requirements, not just constructed test
+cases.
+
 Exposed three ways:
 - verify_genuine_gap(): the check itself, called directly as a
   deterministic post-processing gate, independent of whether the
   model backend supports tool calling at all. This is the safe
   fallback and works regardless of the agentic path below.
 - TOOL_SCHEMA + call_gap_verifier_tool(): the same check, wrapped for
-  a model to invoke as a tool mid-reasoning. CONFIRMED WORKING via
+  a model to invoke as a tool mid-reasoning. Confirmed working via
   Ollama cloud models through LiteLLM, but only when the model is
   registered with the ollama_chat/ provider prefix, not ollama/ - see
   llm_client.complete_with_tools() for why.
@@ -51,7 +68,10 @@ TOOL_SCHEMA = {
             "Check whether a job requirement flagged as a GENUINE_GAP "
             "(something the applicant's background has no basis for at "
             "all) is actually unsupported, by searching the career "
-            "master document for direct or adjacent evidence. Call this "
+            "master document for direct or adjacent evidence. If the "
+            "requirement bundles multiple tools/skills together, this "
+            "checks only the specific item(s) the quoted draft text is "
+            "actually about, not the bundle as a whole. Call this "
             "before finalising any GENUINE_GAP flag."
         ),
         "parameters": {
@@ -78,7 +98,14 @@ def verify_genuine_gap(
     """
     The actual check. Runs a narrow verification prompt and returns a
     dict: {"verdict": "CONFIRMED_GAP" | "ACTUALLY_SUPPORTED",
-    "basis_found": str | None}.
+    "basis_found": str | None, "scoped_items": str | None}.
+
+    scoped_items records what the model identified as the specific
+    thing it actually checked, distinct from the full (possibly
+    bundled) job_ad_requirement - this is worth logging even when the
+    verdict looks right, since it's the visible evidence that the
+    scoping step actually happened rather than the model silently
+    matching against the whole bundle again.
 
     Called directly (deterministic post-processing gate) or via
     call_gap_verifier_tool (agentic path). Both paths run this same
@@ -110,11 +137,22 @@ def verify_genuine_gap(
         # don't crash the loop either - surface it as unverifiable so
         # the calling code can decide (e.g. treat as still-open rather
         # than either confirmed or downgraded).
-        return {"verdict": "UNVERIFIABLE", "basis_found": None, "raw_response": raw}
+        return {
+            "verdict": "UNVERIFIABLE",
+            "basis_found": None,
+            "scoped_items": None,
+            "raw_response": raw,
+        }
 
     if result.get("verdict") not in ("CONFIRMED_GAP", "ACTUALLY_SUPPORTED"):
-        return {"verdict": "UNVERIFIABLE", "basis_found": None, "raw_response": raw}
+        return {
+            "verdict": "UNVERIFIABLE",
+            "basis_found": None,
+            "scoped_items": None,
+            "raw_response": raw,
+        }
 
+    result.setdefault("scoped_items", None)
     return result
 
 
@@ -123,14 +161,6 @@ def call_gap_verifier_tool(arguments: dict, career_master_doc: str) -> dict:
     Entry point for the agentic path: called when a model produces a
     tool_call matching TOOL_SCHEMA's name and arguments. Unpacks the
     arguments the model provided and runs the same check.
-
-    Experimental - depends on the backend actually supporting and
-    correctly invoking tool calls through LiteLLM. If this turns out
-    not to work reliably, the deterministic path (calling
-    verify_genuine_gap directly on every GENUINE_GAP flag, without
-    waiting for the model to decide to call a tool) is the fallback
-    and arguably the more reliable choice given everything else this
-    project has found about model reliability on judgement calls.
     """
     return verify_genuine_gap(
         quoted_text=arguments["quoted_text"],
@@ -151,21 +181,22 @@ def run_agentic_verification(
 
     Returns a dict with the loop's raw result (final_content,
     tool_calls_made, hit_max_rounds from llm_client.run_agentic_loop)
-    plus a convenience "verdict" field pulled from the tool call's
-    result if one was made, so callers that only care about the
-    verdict don't have to dig through tool_calls_made themselves.
+    plus convenience "verdict" and "scoped_items" fields pulled from
+    the tool call's result if one was made, so callers that only care
+    about the outcome don't have to dig through tool_calls_made
+    themselves.
 
     This is one narrow, single-purpose use of tool calling - not a
     general-purpose agent. Kept deliberately small: one tool, one
-    possible call, a tight max_tool_rounds. The point right now is
-    confirming the mechanism works end to end on this project's real
-    data, not building a general agent framework.
+    possible call, a tight max_tool_rounds.
     """
     prompt = (
         "A recruiter-critic reviewing a CV draft against a job advert "
         "flagged the following as a GENUINE_GAP - meaning it believes "
         "the applicant's background has no basis at all for this "
-        "requirement, direct or indirect.\n\n"
+        "requirement, direct or indirect. Note the job requirement may "
+        "bundle several distinct things together - the quoted text is "
+        "usually only about a specific part of that bundle.\n\n"
         f"Job requirement: {job_ad_requirement}\n"
         f"Quoted draft text the flag is about: {quoted_text}\n\n"
         "Before this flag is accepted as a genuine, unaddressable gap, "
@@ -185,7 +216,10 @@ def run_agentic_verification(
     )
 
     verdict = None
+    scoped_items = None
     if result["tool_calls_made"]:
-        verdict = result["tool_calls_made"][0]["result"].get("verdict")
+        tool_result = result["tool_calls_made"][0]["result"]
+        verdict = tool_result.get("verdict")
+        scoped_items = tool_result.get("scoped_items")
 
-    return {**result, "verdict": verdict}
+    return {**result, "verdict": verdict, "scoped_items": scoped_items}

@@ -1,16 +1,18 @@
 You are checking a single claim made by a recruiter-critic: that the applicant's career master document contains no basis at all for a specific job requirement, making it a genuine, unaddressable gap rather than something that could be revised into the draft.
 
-You are given the career master document (the only source of truth), the job requirement in question, and the critic's quoted reasoning for why it considers this a genuine gap.
+You are given the career master document (the only source of truth), the job requirement in question, and the quoted draft text the critic's flag is about.
 
-Your job is narrow: decide whether the critic is right that there is NO basis at all, direct or indirect, for this requirement in the master document.
+IMPORTANT - do this scoping step first, before checking anything: the job requirement text may bundle several distinct tools, skills, or qualifications together (e.g. "SAS, R, Python, Matlab" or "AWS, Azure, GCP" all in one requirement). The quoted draft text is usually about a narrower, more specific slice of that bundle, not the whole thing - for example, a draft might honestly disclose lacking SAS and cloud platforms specifically, while separately (and correctly) claiming Python and R elsewhere. Identify exactly which specific tool(s), skill(s), or qualification(s) the quoted text is actually making a claim about - usually the ones it names as absent or that the flag is really contesting - and check ONLY those specific items against the master document. Do not treat the requirement bundle as a single unit where finding support for any one item inside it counts as supporting the whole thing. A bundle is only ACTUALLY_SUPPORTED for the purposes of this specific flag if the specific item(s) the quoted text is about have a basis - evidence for a different item in the same bundle does not count.
 
-Use the same evidentiary standard as fact-checking hard/technical claims: a basis can be direct (the skill or tool is named explicitly) or adjacent-and-explainable (covered by something named closely enough that the applicant could speak to it competently - e.g. a named course, a project that demonstrably required the skill even if unnamed, or hands-on exposure described in different words). A basis does NOT include: the job ad's own wording being echoed back, a loosely related general skill category standing in for a specific named tool, or wishful inference with no textual anchor.
+Once you have identified the specific item(s) in question, decide whether the critic is right that there is NO basis at all, direct or indirect, for those specific item(s) in the master document.
+
+Use the same evidentiary standard as fact-checking hard/technical claims: a basis can be direct (the skill or tool is named explicitly) or adjacent-and-explainable (covered by something named closely enough that the applicant could speak to it competently - e.g. a named course, a project that demonstrably required the skill even if unnamed, or hands-on exposure described in different words). A basis does NOT include: the job ad's own wording being echoed back, a loosely related general skill category standing in for a specific named tool, evidence for a different item in the same requirement bundle, or wishful inference with no textual anchor.
 
 Classify as one of:
-- CONFIRMED_GAP: the critic is right. Nothing in the master document, direct or adjacent, supports this requirement. This closes the flag as genuinely unaddressable.
-- ACTUALLY_SUPPORTED: the master document does contain a direct or adjacent basis the critic missed. Quote it. This means the flag was miscategorised and should not have been GENUINE_GAP - it should go back to the critic as MISSING_EVIDENCE or WEAK_FRAMING instead, since there is real material to work with.
+- CONFIRMED_GAP: the critic is right. Nothing in the master document, direct or adjacent, supports the specific item(s) the quoted text is actually about. This closes the flag as genuinely unaddressable.
+- ACTUALLY_SUPPORTED: the master document does contain a direct or adjacent basis for the specific item(s) in question that the critic missed. Quote it. This means the flag was miscategorised and should not have been GENUINE_GAP - it should go back to the critic as MISSING_EVIDENCE or WEAK_FRAMING instead, since there is real material to work with.
 
-Do not soften this to be diplomatic. If there is truly nothing, say CONFIRMED_GAP plainly. If there is something, however partial, quote exactly what it is.
+Do not soften this to be diplomatic. If there is truly nothing for the specific item(s) in question, say CONFIRMED_GAP plainly, even if other unrelated items in the same requirement bundle are well supported. If there is something, however partial, quote exactly what it is and confirm it is actually about the same specific item, not a different one from the same bundle.
 
 ---
 
@@ -19,17 +21,17 @@ CAREER MASTER DOCUMENT:
 
 ---
 
-JOB REQUIREMENT IN QUESTION:
+JOB REQUIREMENT IN QUESTION (may be a bundle - scope to the specific item(s) below):
 {job_ad_requirement}
 
 ---
 
-CRITIC'S QUOTED FLAG TEXT AND REASONING:
-Quoted text from draft: {quoted_text}
+QUOTED DRAFT TEXT THE FLAG IS ABOUT (identifies which specific item(s) to check):
+{quoted_text}
 
 ---
 
 Respond with ONLY a JSON object, nothing else - no preamble, no markdown fences:
-{{"verdict": "CONFIRMED_GAP", "basis_found": null}}
+{{"scoped_items": "the specific tool/skill/qualification you identified as what's actually being checked, not the full bundle", "verdict": "CONFIRMED_GAP", "basis_found": null}}
 or
-{{"verdict": "ACTUALLY_SUPPORTED", "basis_found": "the exact quote or close paraphrase of the basis found in the master document"}}
+{{"scoped_items": "the specific tool/skill/qualification you identified as what's actually being checked, not the full bundle", "verdict": "ACTUALLY_SUPPORTED", "basis_found": "the exact quote or close paraphrase of the basis found in the master document, for the scoped item specifically"}}

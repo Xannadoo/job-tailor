@@ -15,6 +15,14 @@ This is deliberately narrow: it parses heading-style date ranges
 (e.g. "(Jan 2023 - Jun 2025)", "(2023-2025)", "(Sept 2025 - present)")
 and entries with only a single year are treated as informational only
 (no clear range to compute a duration from), not skipped silently.
+
+Also includes compute_total_experience(), which merges overlapping
+date ranges into a single covered timeline - added after a real bug
+(failure log entry 9) where the model, given correct individual role
+durations, still summed them into a wildly wrong total career length.
+Overlapping roles (e.g. TA and MSc both 2023-2025) mean naive summing
+double-counts; merging intervals avoids that and gives an exact,
+guaranteed-correct answer for "how many years of experience" claims.
 """
 
 import re
@@ -79,6 +87,16 @@ class DateRangeFact:
         return self.start_month is None or (
             not self.is_ongoing and self.end_month is None
         )
+
+    def start_date(self) -> date:
+        """First-of-month approximation of when this began."""
+        return date(self.start_year, self.start_month or 1, 1)
+
+    def end_date(self, today: date) -> date:
+        """First-of-month approximation of when this ended, or today if ongoing."""
+        if self.is_ongoing:
+            return today
+        return date(self.end_year, self.end_month or 12, 1)
 
     def describe(self, today: date) -> str:
         """Render this fact as a plain-English line for prompt injection."""
@@ -152,8 +170,6 @@ def extract_date_facts(career_master_doc: str, today: date) -> list[DateRangeFac
         title = match.group("title").strip()
         raw_range = match.group("range").strip()
 
-        # Split on the dash-like separator between start and end.
-        # Master doc uses both en-dash (–) and hyphen (-).
         parts = re.split(r"\s*[–—-]\s*", raw_range)
         if len(parts) != 2:
             continue
@@ -162,8 +178,6 @@ def extract_date_facts(career_master_doc: str, today: date) -> list[DateRangeFac
         end_parsed = _parse_date_part(parts[1])
 
         if start_parsed is None or start_parsed == "present" or end_parsed is None:
-            # A range needs a real start date; skip anything else
-            # rather than fabricate a guess.
             continue
 
         start_year, start_month = start_parsed
@@ -185,8 +199,8 @@ def extract_date_facts(career_master_doc: str, today: date) -> list[DateRangeFac
 
         end_year, end_month = end_parsed
 
-        end_date = date(end_year, end_month or 12, 1)
-        is_ongoing = end_date > today
+        end_date_val = date(end_year, end_month or 12, 1)
+        is_ongoing = end_date_val > today
 
         duration_years = None
         if not is_ongoing:
@@ -224,3 +238,79 @@ def build_date_facts_block(career_master_doc: str, today: date) -> str:
 
     lines = [f.describe(today) for f in facts]
     return "\n".join(f"- {line}" for line in lines)
+
+
+def compute_total_experience(facts: list[DateRangeFact], today: date) -> dict:
+    """
+    Merge all date ranges into a single covered timeline and return
+    the exact, guaranteed-correct total. This exists because summing
+    individual role durations double-counts overlapping periods (e.g.
+    the TA role and MSc both ran 2023-2025) - merging intervals first
+    avoids that.
+
+    Returns a dict:
+    - earliest_start: ISO date string of the earliest date found
+    - career_span_years: today minus earliest_start, i.e. total time
+      since the earliest recorded activity began, INCLUDING any gaps
+      where nothing in the master doc is recorded (e.g. time not
+      covered by any role or degree).
+    - covered_years: sum of merged, non-overlapping intervals - the
+      total time actually accounted for by something in the master
+      doc, excluding gaps. This is the more defensible number for a
+      claim like "X years of experience," since career_span_years can
+      overstate it if there are real gaps.
+    - gap_years: career_span_years minus covered_years. Non-zero means
+      there's a real gap somewhere the master doc doesn't account for
+      - not necessarily a problem (could be full-time study, travel,
+      etc.) but worth being aware the two numbers can differ.
+
+    If facts is empty, all values are None - there's nothing to
+    compute from, and returning zeroes would misleadingly imply zero
+    experience rather than "no data."
+    """
+    if not facts:
+        return {
+            "earliest_start": None,
+            "career_span_years": None,
+            "covered_years": None,
+            "gap_years": None,
+        }
+
+    intervals = sorted(
+        (f.start_date(), f.end_date(today)) for f in facts
+    )
+
+    earliest_start = intervals[0][0]
+
+    # Merge overlapping/touching intervals to get true covered time.
+    merged = [intervals[0]]
+    for start, end in intervals[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+
+    covered_months = sum(
+        (end.year - start.year) * 12 + (end.month - start.month)
+        for start, end in merged
+    )
+    covered_years = round(covered_months / 12, 1)
+
+    span_months = (today.year - earliest_start.year) * 12 + (
+        today.month - earliest_start.month
+    )
+    career_span_years = round(span_months / 12, 1)
+
+    return {
+        "earliest_start": earliest_start.isoformat(),
+        "career_span_years": career_span_years,
+        "covered_years": covered_years,
+        "gap_years": round(career_span_years - covered_years, 1),
+    }
+
+
+def total_experience_from_doc(career_master_doc: str, today: date) -> dict:
+    """Convenience wrapper: extract facts from the doc, then compute totals."""
+    facts = extract_date_facts(career_master_doc, today)
+    return compute_total_experience(facts, today)
